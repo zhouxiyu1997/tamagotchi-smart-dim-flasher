@@ -2,6 +2,7 @@ const uploadForm = document.getElementById("upload-form");
 const uploadButton = document.getElementById("upload-button");
 const installButton = document.getElementById("install-button");
 const backupButton = document.getElementById("backup-button");
+const probeButton = document.getElementById("probe-button");
 const resetUsageButton = document.getElementById("reset-usage-button");
 const restoreButton = document.getElementById("restore-button");
 const logOutput = document.getElementById("log-output");
@@ -35,6 +36,7 @@ function setButtonsDisabled(disabled) {
   uploadButton.disabled = disabled;
   installButton.disabled = disabled || !currentState?.latestUpload;
   backupButton.disabled = disabled;
+  probeButton.disabled = disabled;
   resetUsageButton.disabled = disabled;
   restoreButton.disabled = disabled || !currentState?.latestBackup;
 }
@@ -64,6 +66,7 @@ function renderState(state) {
   const upload = state.latestUpload;
   const backup = state.latestBackup;
   const flash = state.latestFlash;
+  const probe = state.latestProbe;
   const restore = state.latestRestore;
   const config = state.config;
 
@@ -138,8 +141,11 @@ function renderState(state) {
     [
       metaBlock("flashrom", config.flashromBin),
       metaBlock("程序器", config.programmer),
-      metaBlock("芯片定义", config.chip),
-      metaBlock("最近检测卡容量", config.detectedCardSizeBytes != null ? formatBytes(config.detectedCardSizeBytes) : "尚未检测"),
+      metaBlock("默认芯片定义", config.chip),
+      metaBlock("上次探测芯片", probe?.chip || config.probedChip || "尚未探测"),
+      metaBlock("上次探测容量", config.probedCardSizeBytes != null ? formatBytes(config.probedCardSizeBytes) : "尚未探测"),
+      metaBlock("上次探测时间", probe?.probed_at || "尚未探测"),
+      metaBlock("最近备份容量", config.latestBackupSizeBytes != null ? formatBytes(config.latestBackupSizeBytes) : "尚无备份"),
       metaBlock("Payload 容量", formatBytes(config.payloadSizeBytes)),
       metaBlock("完整镜像范围", config.fullImageRange),
       metaBlock("运行目录", state.runtimeDir),
@@ -242,6 +248,23 @@ backupButton.addEventListener("click", async () => {
     renderState(error.state || currentState);
     writeLog(error.message || "备份失败。", error.log || "");
     setBusy("备份失败", true);
+  } finally {
+    setButtonsDisabled(false);
+  }
+});
+
+probeButton.addEventListener("click", async () => {
+  setBusy("探测中…");
+  setButtonsDisabled(true);
+  try {
+    const data = await post("/api/probe");
+    renderState(data.state);
+    writeLog(data.message, data.log);
+    setBusy("探测完成");
+  } catch (error) {
+    renderState(error.state || currentState);
+    writeLog(error.message || "探测失败。", error.log || "");
+    setBusy("探测失败", true);
   } finally {
     setButtonsDisabled(false);
   }

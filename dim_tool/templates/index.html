@@ -29,10 +29,11 @@
           <div class="actions">
             <button id="install-button" type="button" class="secondary" disabled>安装到当前 DiM 卡</button>
             <button id="backup-button" type="button" class="ghost">仅备份当前卡</button>
+            <button id="probe-button" type="button" class="ghost">探测当前卡容量</button>
             <button id="reset-usage-button" type="button" class="ghost">重置当前卡使用次数</button>
           </div>
           <p class="hint">
-            1MB BIN 会只覆盖前 1MB，剩余区域按当前卡实际容量保留；完整 BIN 需要和当前卡容量一致。也可以不改内容，直接扫描并清空当前卡的使用次数。
+            1MB BIN 会只覆盖前 1MB，剩余区域按当前卡实际容量保留；完整 BIN 需要和当前卡容量一致。也可以先单独探测当前卡，再决定是备份、安装还是只重置使用次数。
           </p>
         </article>
 

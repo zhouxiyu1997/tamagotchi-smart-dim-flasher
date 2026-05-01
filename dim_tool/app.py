@@ -58,7 +58,9 @@ def create_app() -> Flask:
         save_state(state)
 
         try:
-            backup_path, backup_log = flash_service.backup_current_card(f"upload-{saved_path.stem}")
+            backup_path, backup_log, detected_chip = flash_service.backup_current_card(
+                f"upload-{saved_path.stem}"
+            )
         except FlashromError as exc:
             save_state(state)
             message = "BIN 已上传，但自动备份当前卡失败。"
@@ -66,7 +68,9 @@ def create_app() -> Flask:
 
         backup_entry = entry_with_time(file_info(backup_path), "created_at", reason="auto-backup-after-upload")
         state["latest_backup"] = backup_entry
+        state["latest_probe"] = probe_entry(detected_chip, "auto-backup-after-upload")
         push_history(state, "backups", backup_entry)
+        push_history(state, "probes", state["latest_probe"])
         save_state(state)
 
         return jsonify(
@@ -81,14 +85,16 @@ def create_app() -> Flask:
     @app.post("/api/backup")
     def api_backup():
         try:
-            backup_path, backup_log = flash_service.backup_current_card("manual-backup")
+            backup_path, backup_log, detected_chip = flash_service.backup_current_card("manual-backup")
         except FlashromError as exc:
             return error_response("手动备份失败。", 500, exc.log)
 
         state = load_state()
         backup_entry = entry_with_time(file_info(backup_path), "created_at", reason="manual")
         state["latest_backup"] = backup_entry
+        state["latest_probe"] = probe_entry(detected_chip, "manual-backup")
         push_history(state, "backups", backup_entry)
+        push_history(state, "probes", state["latest_probe"])
         save_state(state)
 
         return jsonify(
@@ -96,6 +102,30 @@ def create_app() -> Flask:
                 "ok": True,
                 "message": "当前卡备份完成。",
                 "log": backup_log,
+                "state": public_state(),
+            }
+        )
+
+    @app.post("/api/probe")
+    def api_probe():
+        try:
+            detected_chip = flash_service.probe_flash_chip()
+        except FlashromError as exc:
+            return error_response("探测当前卡失败。", 500, exc.log)
+
+        state = load_state()
+        state["latest_probe"] = probe_entry(detected_chip, "manual-probe")
+        push_history(state, "probes", state["latest_probe"])
+        save_state(state)
+
+        return jsonify(
+            {
+                "ok": True,
+                "message": (
+                    "当前卡探测完成。"
+                    f" 已识别为 {detected_chip.name}，容量 {format_size_bytes(detected_chip.size_bytes)}。"
+                ),
+                "log": detected_chip.log,
                 "state": public_state(),
             }
         )
@@ -112,7 +142,9 @@ def create_app() -> Flask:
             return error_response("找不到刚才上传的 BIN 文件。", 400)
 
         try:
-            fresh_backup_path, fresh_backup_log = flash_service.backup_current_card(f"pre-install-{source_path.stem}")
+            fresh_backup_path, fresh_backup_log, detected_chip = flash_service.backup_current_card(
+                f"pre-install-{source_path.stem}"
+            )
             prepared = flash_service.prepare_image(source_path, fresh_backup_path)
             write_log = flash_service.write_image(prepared.path)
         except FlashromError as exc:
@@ -120,7 +152,9 @@ def create_app() -> Flask:
 
         backup_entry = entry_with_time(file_info(fresh_backup_path), "created_at", reason="pre-install")
         state["latest_backup"] = backup_entry
+        state["latest_probe"] = probe_entry(detected_chip, "pre-install-backup")
         push_history(state, "backups", backup_entry)
+        push_history(state, "probes", state["latest_probe"])
 
         latest_flash = {
             "flashed_at": iso_now(),
@@ -187,7 +221,7 @@ def create_app() -> Flask:
     @app.post("/api/reset-usage")
     def api_reset_usage():
         try:
-            backup_path, backup_log = flash_service.backup_current_card("pre-usage-reset")
+            backup_path, backup_log, detected_chip = flash_service.backup_current_card("pre-usage-reset")
             prepared = flash_service.prepare_usage_reset_image(backup_path)
         except FlashromError as exc:
             return error_response("读取当前卡或分析使用次数失败。", 500, exc.log)
@@ -199,7 +233,9 @@ def create_app() -> Flask:
             reason="pre-usage-reset",
         )
         state["latest_backup"] = backup_entry
+        state["latest_probe"] = probe_entry(detected_chip, "pre-usage-reset")
         push_history(state, "backups", backup_entry)
+        push_history(state, "probes", state["latest_probe"])
         save_state(state)
 
         combined_log_parts = [
@@ -287,10 +323,12 @@ def default_state() -> dict[str, object]:
         "latest_backup": None,
         "latest_flash": None,
         "latest_restore": None,
+        "latest_probe": None,
         "uploads": [],
         "backups": [],
         "flashes": [],
         "restores": [],
+        "probes": [],
     }
 
 
@@ -320,6 +358,17 @@ def entry_with_time(base: dict[str, object], time_key: str, **extra: object) -> 
     return entry
 
 
+def probe_entry(chip, reason: str) -> dict[str, object]:
+    return entry_with_time(
+        {
+            "chip": chip.name,
+            "size": chip.size_bytes,
+        },
+        "probed_at",
+        reason=reason,
+    )
+
+
 def unique_upload_name(original_name: str) -> str:
     cleaned = Path(original_name).name.replace("\x00", "")
     if cleaned in {"", ".", ".."}:
@@ -340,10 +389,16 @@ def validate_bin_size(path: Path) -> None:
 
 def public_state() -> dict[str, object]:
     state = load_state()
+    latest_probe = state.get("latest_probe")
     latest_backup = state.get("latest_backup")
-    detected_card_size_bytes = None
+    probed_chip = None
+    probed_card_size_bytes = None
+    if isinstance(latest_probe, dict):
+        probed_chip = latest_probe.get("chip")
+        probed_card_size_bytes = latest_probe.get("size")
+    latest_backup_size_bytes = None
     if isinstance(latest_backup, dict):
-        detected_card_size_bytes = latest_backup.get("size")
+        latest_backup_size_bytes = latest_backup.get("size")
     return {
         "config": {
             "flashromAvailable": flash_service.flashrom_available(),
@@ -355,12 +410,15 @@ def public_state() -> dict[str, object]:
                 f"{format_size_bytes(MIN_FULL_IMAGE_SIZE_BYTES)}"
                 f" - {format_size_bytes(MAX_IMAGE_SIZE_BYTES)}"
             ),
-            "detectedCardSizeBytes": detected_card_size_bytes,
+            "probedChip": probed_chip,
+            "probedCardSizeBytes": probed_card_size_bytes,
+            "latestBackupSizeBytes": latest_backup_size_bytes,
         },
         "latestUpload": state.get("latest_upload"),
         "latestBackup": state.get("latest_backup"),
         "latestFlash": state.get("latest_flash"),
         "latestRestore": state.get("latest_restore"),
+        "latestProbe": latest_probe,
         "recentBackups": state.get("backups", [])[:5],
         "runtimeDir": str(flash_service.runtime_dir),
     }

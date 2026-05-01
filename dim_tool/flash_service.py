@@ -158,19 +158,20 @@ class FlashService:
     def probe_flash_chip(self) -> DetectedFlashChip:
         cmd = [self.flashrom_bin, "-p", self.programmer, "-V"]
         ok, log, returncode = self._run_flashrom_cmd(cmd)
+        chip = parse_detected_flash_chip(log)
+        if chip is not None:
+            return chip
+
         if not ok:
             raise FlashromError(
                 f"flashrom chip probe exited with code {returncode}.",
                 log=log,
             )
 
-        chip = parse_detected_flash_chip(log)
-        if chip is None:
-            raise FlashromError(
-                "flashrom 没有返回可解析的芯片型号/容量信息。",
-                log=log,
-            )
-        return chip
+        raise FlashromError(
+            "flashrom 没有返回可解析的芯片型号/容量信息。",
+            log=log,
+        )
 
     def run_flashrom_for_chip(self, chip_name: str, *args: str) -> str:
         cmd = self._flashrom_cmd(*args, chip_override=chip_name)
@@ -182,7 +183,17 @@ class FlashService:
             )
         return log
 
-    def backup_current_card(self, reason: str) -> tuple[Path, str]:
+    def run_flashrom_autodetect(self, *args: str) -> str:
+        cmd = self._flashrom_cmd(*args, chip_override="")
+        ok, log, returncode = self._run_flashrom_cmd(cmd)
+        if not ok:
+            raise FlashromError(
+                f"flashrom exited with code {returncode}.",
+                log=log,
+            )
+        return log
+
+    def backup_current_card(self, reason: str) -> tuple[Path, str, DetectedFlashChip]:
         detected_chip = self.probe_flash_chip()
         timestamp = timestamp_slug()
         backup_path = self.backups_dir / f"{timestamp}-{reason}.bin"
@@ -210,7 +221,7 @@ class FlashService:
                 read_log,
             ]
         )
-        return backup_path, log
+        return backup_path, log, detected_chip
 
     def write_image(self, image_path: Path) -> str:
         detected_chip = self.probe_flash_chip()
@@ -579,22 +590,84 @@ def parse_detected_flash_chip(log: str) -> DetectedFlashChip | None:
         r'Found .* flash chip "([^"]+)" \((\d+) (B|kB|MB), SPI\)\.',
         log,
     )
-    if not match:
+    if match:
+        chip_name = match.group(1)
+        size_value = int(match.group(2))
+        size_unit = match.group(3)
+        multiplier = {
+            "B": 1,
+            "kB": 1024,
+            "MB": 1024 * 1024,
+        }[size_unit]
+        return DetectedFlashChip(
+            name=chip_name,
+            size_bytes=size_value * multiplier,
+            log=log,
+        )
+
+    multiple_match = re.search(
+        r'Multiple flash chip definitions match the detected chip\(s\): (.+)',
+        log,
+    )
+    if not multiple_match:
         return None
 
-    chip_name = match.group(1)
-    size_value = int(match.group(2))
-    size_unit = match.group(3)
-    multiplier = {
+    candidate_names = re.findall(r'"([^"]+)"', multiple_match.group(1))
+    if not candidate_names:
+        return None
+
+    probe_sizes = parse_probe_sizes_by_chip_name(log)
+    unique_sizes = {probe_sizes[name] for name in candidate_names if name in probe_sizes}
+    if len(unique_sizes) == 1:
+        selected_name = candidate_names[0]
+        selected_size = unique_sizes.pop()
+        return DetectedFlashChip(
+            name=selected_name,
+            size_bytes=selected_size,
+            log=(
+                f"flashrom 探测到了多颗同族候选芯片，已自动选择 `{selected_name}`。"
+                "\n\n"
+                f"{log}"
+            ),
+        )
+
+    inferred_size = infer_flash_size_from_chip_name(candidate_names[0])
+    if inferred_size is None:
+        return None
+
+    selected_name = candidate_names[0]
+    return DetectedFlashChip(
+        name=selected_name,
+        size_bytes=inferred_size,
+        log=(
+            f"flashrom 探测到了多颗同族候选芯片，已按芯片名推断容量并选择 `{selected_name}`。"
+            "\n\n"
+            f"{log}"
+        ),
+    )
+
+
+def parse_probe_sizes_by_chip_name(log: str) -> dict[str, int]:
+    result: dict[str, int] = {}
+    pattern = re.compile(r"^Probing for .* ([^,]+), (\d+) (B|kB|MB):", re.MULTILINE)
+    multipliers = {
         "B": 1,
         "kB": 1024,
         "MB": 1024 * 1024,
-    }[size_unit]
-    return DetectedFlashChip(
-        name=chip_name,
-        size_bytes=size_value * multiplier,
-        log=log,
-    )
+    }
+    for chip_name, size_value, size_unit in pattern.findall(log):
+        result[chip_name] = int(size_value) * multipliers[size_unit]
+    return result
+
+
+def infer_flash_size_from_chip_name(chip_name: str) -> int | None:
+    numeric_tokens = [int(token) for token in re.findall(r"\d+", chip_name)]
+    if not numeric_tokens:
+        return None
+    candidate_mbit = max(numeric_tokens)
+    if candidate_mbit <= 0:
+        return None
+    return candidate_mbit * 1024 * 1024 // 8
 
 
 def flashrom_permission_hint(log: str) -> str | None:
@@ -603,7 +676,6 @@ def flashrom_permission_hint(log: str) -> str | None:
         "libusb_error_access",
         "root privilege",
         "cannot detach the existing usb driver",
-        "no capture entitlements",
     )
     if any(marker in lowered for marker in permission_markers):
         return (
