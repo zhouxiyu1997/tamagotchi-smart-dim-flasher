@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tamagotchi-smart-dim-flasher"
+version = "0.1.0"
+description = "macOS CH341A web flasher for Tamagotchi Smart DiM and TamaSma cards"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "xiyu" },
+]
+dependencies = [
+  "Flask>=3.0,<4",
+]
+keywords = [
+  "tamagotchi",
+  "smart",
+  "dim",
+  "tamasma",
+  "ch341a",
+  "flashrom",
+  "macos",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Web Environment",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Operating System :: MacOS",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Software Development :: Embedded Systems",
+  "Topic :: Utilities",
+]
+
+[project.scripts]
+dim-tool = "dim_tool.__main__:main"
+
+[tool.setuptools]
+packages = ["dim_tool"]

@@ -2,4 +2,5 @@
 runtime/
 __pycache__/
 .DS_Store
-tamasmart/
+/tamasmart/*
+!/tamasmart/README.md
