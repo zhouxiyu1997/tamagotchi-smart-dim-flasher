@@ -21,7 +21,7 @@
           <h2>安装新 BIN</h2>
           <form id="upload-form" class="stack">
             <label class="file-picker">
-              <span>选择 1MB 或 4MB 的 BIN 文件</span>
+              <span>选择 1MB payload，或与当前卡容量一致的完整 BIN</span>
               <input id="bin-file" name="bin_file" type="file" accept=".bin" required />
             </label>
             <button id="upload-button" type="submit">上传并备份当前卡</button>
@@ -29,9 +29,10 @@
           <div class="actions">
             <button id="install-button" type="button" class="secondary" disabled>安装到当前 DiM 卡</button>
             <button id="backup-button" type="button" class="ghost">仅备份当前卡</button>
+            <button id="reset-usage-button" type="button" class="ghost">重置当前卡使用次数</button>
           </div>
           <p class="hint">
-            1MB BIN 会自动保留当前卡后 3MB 区域；4MB BIN 会整片写入。
+            1MB BIN 会只覆盖前 1MB，剩余区域按当前卡实际容量保留；完整 BIN 需要和当前卡容量一致。也可以不改内容，直接扫描并清空当前卡的使用次数。
           </p>
         </article>
 

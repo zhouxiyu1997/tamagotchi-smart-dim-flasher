@@ -24,9 +24,11 @@ def main() -> None:
     host = os.environ.get("DIM_HOST", "127.0.0.1")
     requested_port = int(os.environ.get("DIM_PORT", "8765"))
     port = pick_port(host, requested_port)
+    url = f"http://{host}:{port}"
+
+    print(f"DiM tool web UI: {url}")
 
     if os.environ.get("DIM_OPEN_BROWSER", "1") == "1":
-        url = f"http://{host}:{port}"
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
 
     app = create_app()

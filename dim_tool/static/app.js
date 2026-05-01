@@ -2,6 +2,7 @@ const uploadForm = document.getElementById("upload-form");
 const uploadButton = document.getElementById("upload-button");
 const installButton = document.getElementById("install-button");
 const backupButton = document.getElementById("backup-button");
+const resetUsageButton = document.getElementById("reset-usage-button");
 const restoreButton = document.getElementById("restore-button");
 const logOutput = document.getElementById("log-output");
 const statusPill = document.getElementById("status-pill");
@@ -34,6 +35,7 @@ function setButtonsDisabled(disabled) {
   uploadButton.disabled = disabled;
   installButton.disabled = disabled || !currentState?.latestUpload;
   backupButton.disabled = disabled;
+  resetUsageButton.disabled = disabled;
   restoreButton.disabled = disabled || !currentState?.latestBackup;
 }
 
@@ -98,6 +100,21 @@ function renderState(state) {
     flashBlocks.push(metaBlock("模式", flash.mode));
     flashBlocks.push(metaBlock("说明", flash.note));
     flashBlocks.push(metaBlock("来源 BIN", flash.source.name));
+    if (flash.detectedCardSizeBytes != null) {
+      flashBlocks.push(metaBlock("检测到卡容量", formatBytes(flash.detectedCardSizeBytes)));
+    }
+    if (flash.detectedSegmentCount != null) {
+      flashBlocks.push(metaBlock("检测到镜像段", String(flash.detectedSegmentCount)));
+    }
+    if (flash.detectedSegmentSizeBytes != null) {
+      flashBlocks.push(metaBlock("每段容量", formatBytes(flash.detectedSegmentSizeBytes)));
+    }
+    if (flash.usageCountBefore != null) {
+      flashBlocks.push(metaBlock("清零前次数", String(flash.usageCountBefore)));
+    }
+    if (flash.usageCountAfter != null) {
+      flashBlocks.push(metaBlock("清零后次数", String(flash.usageCountAfter)));
+    }
   }
   if (restore) {
     flashBlocks.push(metaBlock("最近复原", restore.restored_at));
@@ -122,8 +139,9 @@ function renderState(state) {
       metaBlock("flashrom", config.flashromBin),
       metaBlock("程序器", config.programmer),
       metaBlock("芯片定义", config.chip),
-      metaBlock("卡容量", formatBytes(config.cardSizeBytes)),
-      metaBlock("载荷容量", formatBytes(config.payloadSizeBytes)),
+      metaBlock("最近检测卡容量", config.detectedCardSizeBytes != null ? formatBytes(config.detectedCardSizeBytes) : "尚未检测"),
+      metaBlock("Payload 容量", formatBytes(config.payloadSizeBytes)),
+      metaBlock("完整镜像范围", config.fullImageRange),
       metaBlock("运行目录", state.runtimeDir),
       metaBlock("工具状态", config.flashromAvailable ? "已找到 flashrom" : "未找到 flashrom"),
     ],
@@ -224,6 +242,28 @@ backupButton.addEventListener("click", async () => {
     renderState(error.state || currentState);
     writeLog(error.message || "备份失败。", error.log || "");
     setBusy("备份失败", true);
+  } finally {
+    setButtonsDisabled(false);
+  }
+});
+
+resetUsageButton.addEventListener("click", async () => {
+  const confirmed = window.confirm("这会先备份当前卡，再把当前内容的使用次数清零，并尽量启用写保护。继续吗？");
+  if (!confirmed) {
+    return;
+  }
+
+  setBusy("重置使用次数中…");
+  setButtonsDisabled(true);
+  try {
+    const data = await post("/api/reset-usage");
+    renderState(data.state);
+    writeLog(data.message, data.log);
+    setBusy("重置完成");
+  } catch (error) {
+    renderState(error.state || currentState);
+    writeLog(error.message || "重置使用次数失败。", error.log || "");
+    setBusy("重置失败", true);
   } finally {
     setButtonsDisabled(false);
   }
