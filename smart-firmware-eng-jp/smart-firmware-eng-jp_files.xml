@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<files>
+  <file name="Smart Firmware [Eng+JP].zip" source="original">
+    <mtime>1695764822</mtime>
+    <size>7646701</size>
+    <md5>ab20b3aba7c6f13857280cf26bf9e055</md5>
+    <crc32>b5d65d40</crc32>
+    <sha1>7246104d1328a2ea523cb9bf6f4ab606274a1fe7</sha1>
+    <format>ZIP</format>
+    <filecount>4</filecount>
+    <viruscheck>1695765175</viruscheck>
+  </file>
+  <file name="smart-firmware-eng-jp_archive.torrent" source="metadata">
+    <btih>2a42240f02fa0b0507731a31eff7c4274c1dfeeb</btih>
+    <mtime>1695765176</mtime>
+    <size>2025</size>
+    <md5>fdf985b8f5879f9192691c722516eef9</md5>
+    <crc32>f71dde57</crc32>
+    <sha1>e9beab8a8b77d81a7089ecea8b717f3c301b5c9c</sha1>
+    <format>Archive BitTorrent</format>
+  </file>
+  <file name="smart-firmware-eng-jp_files.xml" source="original">
+    <format>Metadata</format>
+    <md5>e40c24e6de36cda498135da0556e2f39</md5>
+    <summation>md5</summation>
+  </file>
+  <file name="smart-firmware-eng-jp_meta.sqlite" source="original">
+    <mtime>1695764850</mtime>
+    <size>20480</size>
+    <md5>aa2ae363e5ca618f1784d5caa823b372</md5>
+    <crc32>6b978ad6</crc32>
+    <sha1>f1f7965683bf29fbf98dde9cd8e1b567803c7e5b</sha1>
+    <format>Metadata</format>
+  </file>
+  <file name="smart-firmware-eng-jp_meta.xml" source="original">
+    <mtime>1695765175</mtime>
+    <size>1195</size>
+    <md5>49a4dd822df0be7f724331abe7a217f3</md5>
+    <crc32>240a4209</crc32>
+    <sha1>2bd9f9ea0f526387cbe9071928208284954f1ad1</sha1>
+    <format>Metadata</format>
+  </file>
+</files>

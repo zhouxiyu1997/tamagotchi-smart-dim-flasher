@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DiM 卡一键刷写工具</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Tamagotchi Smart</p>
+        <h1>DiM 卡一键备份与刷写</h1>
+        <p class="subtitle">
+          上传 BIN 后会先备份当前卡内容，再进行安装。页面内保留最近一次备份，可随时一键复原。
+        </p>
+      </section>
+
+      <section class="grid">
+        <article class="card accent">
+          <h2>安装新 BIN</h2>
+          <form id="upload-form" class="stack">
+            <label class="file-picker">
+              <span>选择 1MB 或 4MB 的 BIN 文件</span>
+              <input id="bin-file" name="bin_file" type="file" accept=".bin" required />
+            </label>
+            <button id="upload-button" type="submit">上传并备份当前卡</button>
+          </form>
+          <div class="actions">
+            <button id="install-button" type="button" class="secondary" disabled>安装到当前 DiM 卡</button>
+            <button id="backup-button" type="button" class="ghost">仅备份当前卡</button>
+          </div>
+          <p class="hint">
+            1MB BIN 会自动保留当前卡后 3MB 区域；4MB BIN 会整片写入。
+          </p>
+        </article>
+
+        <article class="card">
+          <h2>一键复原</h2>
+          <p class="subtitle small">
+            使用最近一次自动或手动备份，直接把卡恢复到安装前状态。
+          </p>
+          <button id="restore-button" type="button" class="danger" disabled>复原最近备份</button>
+          <div id="restore-meta" class="meta-list"></div>
+        </article>
+      </section>
+
+      <section class="grid status-grid">
+        <article class="card">
+          <h2>当前上传文件</h2>
+          <div id="upload-meta" class="meta-list empty">还没有上传 BIN。</div>
+        </article>
+
+        <article class="card">
+          <h2>最近备份</h2>
+          <div id="backup-meta" class="meta-list empty">还没有备份记录。</div>
+        </article>
+
+        <article class="card">
+          <h2>最近操作</h2>
+          <div id="flash-meta" class="meta-list empty">还没有刷写或复原记录。</div>
+        </article>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>运行状态</h2>
+          <span id="status-pill" class="pill">准备中</span>
+        </div>
+        <div id="service-meta" class="meta-list"></div>
+        <pre id="log-output" class="log">等待操作…</pre>
+      </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>
