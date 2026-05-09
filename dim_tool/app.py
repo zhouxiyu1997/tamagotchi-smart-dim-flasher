@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
@@ -16,6 +17,7 @@ from .flash_service import (
     format_size_bytes,
     iso_now,
 )
+from .local_assets import discover_local_bin_assets, local_asset_to_dict, local_assets_dir
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATE_PATH = BASE_DIR / "runtime" / "state.json"
@@ -36,6 +38,17 @@ def create_app() -> Flask:
     def api_state():
         return jsonify({"ok": True, "state": public_state()})
 
+    @app.get("/api/local-bins")
+    def api_local_bins():
+        assets = [local_asset_to_dict(asset) for asset in discover_local_bin_assets(BASE_DIR)]
+        return jsonify(
+            {
+                "ok": True,
+                "assets": assets,
+                "assetsDir": str(local_assets_dir(BASE_DIR)),
+            }
+        )
+
     @app.post("/api/upload")
     def api_upload():
         upload = request.files.get("bin_file")
@@ -46,40 +59,57 @@ def create_app() -> Flask:
         upload.save(saved_path)
 
         try:
-            validate_bin_size(saved_path)
+            return finalize_imported_bin(
+                saved_path,
+                success_message="BIN 上传成功，当前卡也已完成备份。",
+                backup_error_message="BIN 已上传，但自动备份当前卡失败。",
+                upload_extra={
+                    "sourceType": "browser-upload",
+                    "sourceLabel": "浏览器上传",
+                    "originalFilename": upload.filename,
+                },
+            )
         except FlashromError as exc:
             saved_path.unlink(missing_ok=True)
             return error_response(str(exc), 400)
 
-        state = load_state()
-        upload_entry = entry_with_time(file_info(saved_path), "uploaded_at")
-        state["latest_upload"] = upload_entry
-        push_history(state, "uploads", upload_entry)
-        save_state(state)
+    @app.post("/api/import-local-bin")
+    def api_import_local_bin():
+        payload = request.get_json(silent=True) or {}
+        requested_relative_path = str(payload.get("relativePath", "")).strip()
+        if not requested_relative_path:
+            return error_response("请先选择 tamasmart 目录里的本地 BIN。", 400)
 
-        try:
-            backup_path, backup_log, detected_chip = flash_service.backup_current_card(
-                f"upload-{saved_path.stem}"
+        selected_asset = next(
+            (
+                asset
+                for asset in discover_local_bin_assets(BASE_DIR)
+                if asset.relative_path == requested_relative_path
+            ),
+            None,
+        )
+        if selected_asset is None:
+            return error_response("找不到指定的本地 BIN，请刷新列表后重试。", 404)
+        if not selected_asset.supported:
+            return error_response(
+                f"这个本地 BIN 的大小不受支持：{selected_asset.size_note}。",
+                400,
             )
-        except FlashromError as exc:
-            save_state(state)
-            message = "BIN 已上传，但自动备份当前卡失败。"
-            return error_response(message, 500, exc.log)
 
-        backup_entry = entry_with_time(file_info(backup_path), "created_at", reason="auto-backup-after-upload")
-        state["latest_backup"] = backup_entry
-        state["latest_probe"] = probe_entry(detected_chip, "auto-backup-after-upload")
-        push_history(state, "backups", backup_entry)
-        push_history(state, "probes", state["latest_probe"])
-        save_state(state)
+        saved_path = flash_service.uploads_dir / unique_upload_name(selected_asset.name)
+        shutil.copyfile(selected_asset.path, saved_path)
 
-        return jsonify(
-            {
-                "ok": True,
-                "message": "BIN 上传成功，当前卡也已完成备份。",
-                "log": backup_log,
-                "state": public_state(),
-            }
+        return finalize_imported_bin(
+            saved_path,
+            success_message="本地 BIN 已导入，当前卡也已完成备份。",
+            backup_error_message="本地 BIN 已导入，但自动备份当前卡失败。",
+            upload_extra={
+                "sourceType": "local-library",
+                "sourceLabel": "tamasmart 本地资源库",
+                "originalFilename": selected_asset.name,
+                "originalPath": str(selected_asset.path),
+                "originalRelativePath": selected_asset.relative_path,
+            },
         )
 
     @app.post("/api/backup")
@@ -376,6 +406,46 @@ def unique_upload_name(original_name: str) -> str:
     return f"{iso_now().replace(':', '-')}-{cleaned}"
 
 
+def finalize_imported_bin(
+    saved_path: Path,
+    *,
+    success_message: str,
+    backup_error_message: str,
+    upload_extra: dict[str, object] | None = None,
+):
+    validate_bin_size(saved_path)
+
+    state = load_state()
+    upload_entry = entry_with_time(file_info(saved_path), "uploaded_at", **(upload_extra or {}))
+    state["latest_upload"] = upload_entry
+    push_history(state, "uploads", upload_entry)
+    save_state(state)
+
+    try:
+        backup_path, backup_log, detected_chip = flash_service.backup_current_card(
+            f"upload-{saved_path.stem}"
+        )
+    except FlashromError as exc:
+        save_state(state)
+        return error_response(backup_error_message, 500, exc.log)
+
+    backup_entry = entry_with_time(file_info(backup_path), "created_at", reason="auto-backup-after-upload")
+    state["latest_backup"] = backup_entry
+    state["latest_probe"] = probe_entry(detected_chip, "auto-backup-after-upload")
+    push_history(state, "backups", backup_entry)
+    push_history(state, "probes", state["latest_probe"])
+    save_state(state)
+
+    return jsonify(
+        {
+            "ok": True,
+            "message": success_message,
+            "log": backup_log,
+            "state": public_state(),
+        }
+    )
+
+
 def validate_bin_size(path: Path) -> None:
     size = path.stat().st_size
     if size == PAYLOAD_SIZE_BYTES:
@@ -410,6 +480,7 @@ def public_state() -> dict[str, object]:
                 f"{format_size_bytes(MIN_FULL_IMAGE_SIZE_BYTES)}"
                 f" - {format_size_bytes(MAX_IMAGE_SIZE_BYTES)}"
             ),
+            "localAssetsDir": str(local_assets_dir(BASE_DIR)),
             "probedChip": probed_chip,
             "probedCardSizeBytes": probed_card_size_bytes,
             "latestBackupSizeBytes": latest_backup_size_bytes,
