@@ -4,6 +4,10 @@ A local `macOS + CH341A` web flasher for backing up, writing, restoring, and res
 
 Copyright (C) 2026 `xiyu`
 
+## User Guide
+
+- Detailed usage guide: [`docs/USER-GUIDE.en.md`](docs/USER-GUIDE.en.md)
+
 ## Project Scope
 
 - Platform: `macOS`

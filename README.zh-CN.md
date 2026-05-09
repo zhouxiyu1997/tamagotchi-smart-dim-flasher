@@ -4,6 +4,10 @@
 
 Copyright (C) 2026 `xiyu`
 
+## 使用文档
+
+- 详细用户手册：[`docs/USER-GUIDE.zh-CN.md`](docs/USER-GUIDE.zh-CN.md)
+
 ## 项目定位
 
 - 运行平台：`macOS`

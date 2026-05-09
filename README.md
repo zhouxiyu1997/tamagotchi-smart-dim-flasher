@@ -8,6 +8,8 @@ A local `macOS + CH341A` web flasher for `Tamagotchi Smart` cards.
 
 - [中文说明](README.zh-CN.md)
 - [English README](README.en.md)
+- [中文使用文档](docs/USER-GUIDE.zh-CN.md)
+- [English User Guide](docs/USER-GUIDE.en.md)
 
 ## Quick Summary
 
